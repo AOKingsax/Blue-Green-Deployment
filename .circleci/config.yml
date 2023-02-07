@@ -12,7 +12,7 @@ commands:
   # Exercise: Reusable Job Code
   print_pipeline_id:
     parameters:
-      id: 
+      id:
         type: string
     steps:
       - run: echo << parameters.id >>
@@ -22,12 +22,12 @@ commands:
     steps:
       - run:
           name: Destroy environment
-          # ${CIRCLE_WORKFLOW_ID} is a Built-in environment variable 
-          # ${CIRCLE_WORKFLOW_ID:0:5} takes the first 5 chars of the variable CIRCLE_CI_WORKFLOW_ID 
+          # ${CIRCLE_WORKFLOW_ID} is a Built-in environment variable
+          # ${CIRCLE_WORKFLOW_ID:0:5} takes the first 5 chars of the variable CIRCLE_CI_WORKFLOW_ID
           when: on_fail
           command: |
             aws cloudformation delete-stack --stack-name myStack-${CIRCLE_WORKFLOW_ID:0:5}
-          
+
 jobs:
   create_and_deploy_front_end:
     docker:
@@ -40,10 +40,11 @@ jobs:
             aws cloudformation deploy \
             --template-file bucket.yml \
             --stack-name stack-create-bucket-${CIRCLE_WORKFLOW_ID:0:7} \
-            --parameter-overrides MyBucketName="mybucket-${CIRCLE_WORKFLOW_ID:0:7}"
+            --parameter-overrides MyBucketName="mybucket-${CIRCLE_WORKFLOW_ID:0:7}" \
+            --region us-east-1
       # Uncomment the step below if yoou wish to upload all contents of the current directory to the S3 bucket
       # - run: aws s3 sync . s3://mybucket-${CIRCLE_WORKFLOW_ID:0:7} --delete
-  
+
   # Exercise: Promote to Production - Job 2
   # Fetch and save the pipeline ID (bucket ID) responsible for the last release.
   get_last_deployment_id:
@@ -57,14 +58,15 @@ jobs:
           command: |
             aws cloudformation \
             list-exports --query "Exports[?Name==\`PipelineID\`].Value" \
-            --no-paginate --output text > ~/textfile.txt
+            --no-paginate --output text > ~/textfile.txt \
+            --region us-east-1
       - persist_to_workspace:
           root: ~/
-          paths: 
-            - textfile.txt 
-  
+          paths:
+            - textfile.txt
+
   # Exercise: Promote to Production - Job 3
-  # Executes the cloudfront.yml template that will modify the existing CloudFront Distribution, change its target from the old bucket to the new bucket - `mybucket-${CIRCLE_WORKFLOW_ID:0:7}`. 
+  # Executes the cloudfront.yml template that will modify the existing CloudFront Distribution, change its target from the old bucket to the new bucket - `mybucket-${CIRCLE_WORKFLOW_ID:0:7}`.
   # Notice here we use the stack name `production-distro` which is the same name we used while deploying to the S3 bucket manually.
   promote_to_production:
     docker:
@@ -77,9 +79,10 @@ jobs:
             aws cloudformation deploy \
             --template-file cloudfront.yml \
             --stack-name production-distro \
-            --parameter-overrides PipelineID="mybucket-${CIRCLE_WORKFLOW_ID:0:7}" 
+            --parameter-overrides PipelineID="mybucket-${CIRCLE_WORKFLOW_ID:0:7}" \
+            --region us-east-1
   # Exercise: Promote to Production - Job 4
-  # Destroy the previous production version's S3 bucket and CloudFormation stack. 
+  # Destroy the previous production version's S3 bucket and CloudFormation stack.
   clean_up_old_front_end:
     docker:
       - image: amazon/aws-cli
@@ -89,17 +92,15 @@ jobs:
       - attach_workspace:
           at: ~/
       - run:
-          name: Destroy the previous production version's S3 bucket and CloudFormation stack. 
+          name: Destroy the previous production version's S3 bucket and CloudFormation stack.
           # Use $OldBucketID environment variable or mybucket644752792305 below.
-          # Similarly, you can create and use $OldStackID environment variable in place of production-distro 
+          # Similarly, you can create and use $OldStackID environment variable in place of production-distro
           command: |
             export OldBucketID=$(cat ~/textfile.txt)
             aws s3 rm "s3://${OldBucketID}" --recursive
-          #  aws cloudformation delete-stack --stack-name production-distro 
+          #  aws cloudformation delete-stack --stack-name production-distro
           #  aws cloudformation delete-stack --stack-name stack-create-bucket-${CIRCLE_WORKFLOW_ID:0:7}
           #  aws cloudformation delete-stack --stack-name myStack-${CIRCLE_WORKFLOW_ID:0:5}
-
-
 
 workflows:
   # Name the workflow "welcome"
@@ -108,7 +109,7 @@ workflows:
     jobs:
       - create_and_deploy_front_end
       - promote_to_production:
-          requires: 
+          requires:
             - create_and_deploy_front_end
       - get_last_deployment_id
       - clean_up_old_front_end:
